@@ -1,0 +1,369 @@
+<div class="mb-6">
+    <div class="flex items-center gap-3 mb-2">
+        <a href="/" class="text-sm accent accent-hover transition">&larr; Back to Dashboard</a>
+    </div>
+    <div class="flex items-start justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-primary"><%= monitor.name %></h1>
+            <p class="text-sm text-muted mt-0.5"><%= monitor.url %></p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                <%= monitor.is_up === true ? 'badge-up' : monitor.is_up === false ? 'badge-down' : 'badge-na' %>">
+                <%= monitor.is_up === true ? 'UP' : monitor.is_up === false ? 'DOWN' : 'N/A' %>
+            </span>
+            <form action="/config/<%= monitor.id %>/check" method="POST">
+                <button class="px-4 py-2 btn-primary text-sm rounded-lg transition">
+                    Check Now
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<% function msToHuman(ms) {
+    if (!ms) return '—';
+    if (ms < 1000) return ms + 'ms';
+    if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+    return (ms / 60000).toFixed(1) + 'm';
+} %>
+
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+    <div class="card rounded-xl shadow-sm p-4 border">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Status</p>
+        <p class="text-xl font-bold <%= lastCheck && lastCheck.status_code < 400 ? 'success-text' : 'error-msg' %>">
+            <%= lastCheck ? lastCheck.status_code : '—' %>
+        </p>
+        <p class="text-xs text-muted mt-0.5">
+            <%= lastCheck ? new Date(lastCheck.checked_at).toLocaleString() : 'Never checked' %>
+        </p>
+    </div>
+
+    <div class="card rounded-xl shadow-sm p-4 border">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Uptime</p>
+        <p class="text-xl font-bold <%= (monitor.uptime_percent || 0) >= 80 ? 'success-text' : 'warning-text' %>">
+            <%= monitor.uptime_percent !== null ? monitor.uptime_percent + '%' : '—' %>
+        </p>
+        <p class="text-xs text-muted mt-0.5"><%= monitor.total_checks %> checks in <%= range %>h</p>
+    </div>
+
+    <div class="card rounded-xl shadow-sm p-4 border">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">Avg Response</p>
+        <p class="text-xl font-bold text-primary"><%= monitor.avg_response_ms ? msToHuman(monitor.avg_response_ms) : '—' %></p>
+        <p class="text-xs text-muted mt-0.5">
+            <%= monitor.min_response_ms && monitor.max_response_ms
+                ? msToHuman(monitor.min_response_ms) + ' – ' + msToHuman(monitor.max_response_ms)
+                : 'No data' %>
+        </p>
+    </div>
+
+    <div class="card rounded-xl shadow-sm p-4 border">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">2xx Success</p>
+        <p class="text-xl font-bold success-text"><%= monitor.success_count %></p>
+        <p class="text-xs text-muted mt-0.5">HTTP 200-299</p>
+    </div>
+
+    <div class="card rounded-xl shadow-sm p-4 border">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">4xx Errors</p>
+        <p class="text-xl font-bold warning-text"><%= monitor.client_error_count %></p>
+        <p class="text-xs text-muted mt-0.5">HTTP 400-499</p>
+    </div>
+
+    <div class="card rounded-xl shadow-sm p-4 border">
+        <p class="text-xs text-muted uppercase tracking-wider mb-1">5xx Errors</p>
+        <p class="text-xl font-bold error-msg"><%= monitor.server_error_count %></p>
+        <p class="text-xs text-muted mt-0.5">HTTP 500-599</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+    <div class="lg:col-span-3 card rounded-xl shadow-sm p-5 border">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold text-primary">Response Time Over Time</h2>
+            <div class="flex gap-1">
+                <% [{label:'6h', val:6}, {label:'12h', val:12}, {label:'24h', val:24}, {label:'7d', val:168}].forEach(function(r) { %>
+                <a href="/check/<%= monitor.id %>?range=<%= r.val %>"
+                    class="px-3 py-1 text-xs rounded-md transition
+                    <%= range == r.val ? 'accent-bg accent-subtle' : 'btn-outline' %>"
+                    style="<%= range == r.val ? '' : 'border-color: var(--border); color: var(--text-secondary);' %>">
+                    <%= r.label %>
+                </a>
+                <% }); %>
+            </div>
+        </div>
+        <canvas id="responseChart" height="100"></canvas>
+    </div>
+
+    <div class="card rounded-xl shadow-sm p-5 border">
+        <h2 class="text-base font-semibold text-primary mb-4">Uptime Breakdown</h2>
+        <div class="space-y-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full" style="background-color:#22c55e;"></div>
+                    <span class="text-sm text-secondary">Success (2xx)</span>
+                </div>
+                <span class="text-sm font-medium text-primary"><%= monitor.success_count %></span>
+            </div>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full" style="background-color:#3b82f6;"></div>
+                    <span class="text-sm text-secondary">Redirects (3xx)</span>
+                </div>
+                <span class="text-sm font-medium text-primary"><%= monitor.redirect_count %></span>
+            </div>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full" style="background-color:#eab308;"></div>
+                    <span class="text-sm text-secondary">Client Err (4xx)</span>
+                </div>
+                <span class="text-sm font-medium text-primary"><%= monitor.client_error_count %></span>
+            </div>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full" style="background-color:#ef4444;"></div>
+                    <span class="text-sm text-secondary">Server Err (5xx)</span>
+                </div>
+                <span class="text-sm font-medium text-primary"><%= monitor.server_error_count %></span>
+            </div>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-3 h-3 rounded-full" style="background-color:#64748b;"></div>
+                    <span class="text-sm text-secondary">Down / Timeout</span>
+                </div>
+                <span class="text-sm font-medium text-primary">
+                    <%= Math.max(0, monitor.total_checks - monitor.success_count - monitor.redirect_count - monitor.client_error_count - monitor.server_error_count) %>
+                </span>
+            </div>
+        </div>
+
+        <% if (monitor.total_checks > 0) { %>
+        <div class="mt-5">
+            <div class="flex h-3 rounded-full overflow-hidden stat-bar-bg">
+                <% if (monitor.success_count > 0) { %>
+                <div style="width:<%= (monitor.success_count / monitor.total_checks * 100).toFixed(1) %>%; background-color:#22c55e;" title="Success"></div>
+                <% } %>
+                <% if (monitor.redirect_count > 0) { %>
+                <div style="width:<%= (monitor.redirect_count / monitor.total_checks * 100).toFixed(1) %>%; background-color:#3b82f6;" title="Redirects"></div>
+                <% } %>
+                <% if (monitor.client_error_count > 0) { %>
+                <div style="width:<%= (monitor.client_error_count / monitor.total_checks * 100).toFixed(1) %>%; background-color:#eab308;" title="Client Errors"></div>
+                <% } %>
+                <% if (monitor.server_error_count > 0) { %>
+                <div style="width:<%= (monitor.server_error_count / monitor.total_checks * 100).toFixed(1) %>%; background-color:#ef4444;" title="Server Errors"></div>
+                <% } %>
+            </div>
+            <p class="text-xs text-muted mt-2 text-center"><%= monitor.total_checks %> total checks</p>
+        </div>
+        <% } %>
+    </div>
+</div>
+
+<div class="card rounded-xl shadow-sm overflow-hidden border">
+    <div class="px-5 py-4 border-b border-subtle flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-primary">Check History</h2>
+            <span class="text-xs text-muted">Max 48h, showing <%= totalRows %> of <%= totalRows %> results</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <% [{label:'6h', val:6}, {label:'12h', val:12}, {label:'24h', val:24}, {label:'48h', val:48}].forEach(function(r) { %>
+            <a href="/check/<%= monitor.id %>?range=<%= r.val %>&page=1"
+                class="px-3 py-1 text-xs rounded-md transition
+                <%= range == r.val ? 'accent-bg accent-subtle' : 'btn-outline' %>"
+                style="<%= range == r.val ? '' : 'border-color: var(--border); color: var(--text-secondary);' %>">
+                <%= r.label %>
+            </a>
+            <% }); %>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="w-full text-sm">
+            <thead class="table-header border-b">
+                <tr>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Time</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Status</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Response</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Result</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Error</th>
+                </tr>
+            </thead>
+            <tbody class="table-body divide-y">
+                <% if (history.length === 0) { %>
+                <tr>
+                    <td colspan="5" class="px-5 py-8 text-center text-muted">No check history yet.</td>
+                </tr>
+                <% } else { %>
+                <% history.forEach(function(row) { %>
+                <tr>
+                    <td class="px-5 py-3 text-secondary text-xs whitespace-nowrap">
+                        <%= new Date(row.checked_at).toLocaleString() %>
+                    </td>
+                    <td class="px-5 py-3">
+                        <% if (row.status_code) { %>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                            <%= row.status_code < 300 ? 'badge-2xx' :
+                               row.status_code < 400 ? 'badge-3xx' :
+                               row.status_code < 500 ? 'badge-4xx' :
+                               'badge-5xx' %>">
+                            <%= row.status_code %>
+                        </span>
+                        <% } else { %>
+                        <span class="badge-na">—</span>
+                        <% } %>
+                    </td>
+                    <td class="px-5 py-3 text-secondary"><%= msToHuman(row.response_time_ms) %></td>
+                    <td class="px-5 py-3">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                            <%= row.is_up ? 'badge-up' : 'badge-down' %>">
+                            <%= row.is_up ? 'UP' : 'DOWN' %>
+                        </span>
+                    </td>
+                    <td class="px-5 py-3 text-xs max-w-xs truncate text-danger-text" title="<%= row.error_message || '' %>">
+                        <%= row.error_message || '—' %>
+                    </td>
+                </tr>
+                <% }); %>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
+
+    <% if (totalPages > 1) { %>
+    <div class="px-5 py-3 border-t border-subtle flex items-center justify-between">
+        <span class="text-xs text-muted">
+            Page <%= page %> of <%= totalPages %> &nbsp·&nbsp <%= PAGE_SIZE %> per page
+        </span>
+        <div class="flex items-center gap-1">
+            <% if (page > 1) { %>
+            <a href="/check/<%= monitor.id %>?range=<%= range %>&page=<%= page - 1 %>"
+                class="px-3 py-1 text-xs btn-outline border rounded transition">
+                &larr; Prev
+            </a>
+            <% } %>
+
+            <% const maxVisible = 5;
+               let startPage = Math.max(1, page - Math.floor(maxVisible / 2));
+               let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+               if (endPage - startPage < maxVisible - 1) {
+                   startPage = Math.max(1, endPage - maxVisible + 1);
+               }
+               for (let i = startPage; i <= endPage; i++) { %>
+            <a href="/check/<%= monitor.id %>?range=<%= range %>&page=<%= i %>"
+                class="px-3 py-1 text-xs border rounded transition
+                <%= i === page ? 'accent-bg text-white' : 'btn-outline' %>"
+                style="<%= i === page ? '' : 'border-color: var(--border); color: var(--text-secondary);' %>">
+                <%= i %>
+            </a>
+            <% } %>
+
+            <% if (page < totalPages) { %>
+            <a href="/check/<%= monitor.id %>?range=<%= range %>&page=<%= page + 1 %>"
+                class="px-3 py-1 text-xs btn-outline border rounded transition">
+                Next &rarr;
+            </a>
+            <% } %>
+        </div>
+    </div>
+    <% } else if (totalRows > 0) { %>
+    <div class="px-5 py-3 border-t border-subtle flex items-center justify-between">
+        <span class="text-xs text-muted">Showing <%= totalRows %> results</span>
+    </div>
+    <% } %>
+</div>
+
+<script>
+const chartData = <%- JSON.stringify(chartHistory) %>;
+const isLight = () => document.documentElement.classList.contains('light');
+
+function fmtLabel(date) {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return day + '/' + month + ' ' + hours + ':' + mins;
+}
+
+function fmtTooltip(date) {
+    const d = new Date(date);
+    return d.toLocaleString('id-ID', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+}
+
+function getChartColors() {
+    return {
+        line: isLight() ? '#6366f1' : '#818cf8',
+        fill: isLight() ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.15)',
+        up: '#22c55e',
+        down: '#ef4444',
+        grid: isLight() ? '#f0f0f0' : '#1e293b',
+        text: isLight() ? '#64748b' : '#94a3b8',
+        tooltipBg: isLight() ? '#ffffff' : '#1e293b',
+        tooltipText: isLight() ? '#0f172a' : '#f1f5f9',
+    };
+}
+
+const c = getChartColors();
+
+// Cap x-axis ticks based on range: 6h→8, 12h→8, 24h→12, 48h→12
+const xTickLimit = chartData.length > 200 ? 12 : chartData.length > 50 ? 8 : chartData.length;
+
+const responseChart = new Chart(document.getElementById('responseChart').getContext('2d'), {
+    type: 'line',
+    data: {
+        labels: chartData.map(d => fmtLabel(d.checked_at)),
+        datasets: [
+            {
+                label: 'Response Time (ms)',
+                data: chartData.map(d => d.response_time_ms),
+                borderColor: c.line,
+                backgroundColor: c.fill,
+                fill: true,
+                tension: 0.3,
+                pointRadius: chartData.length > 100 ? 0 : 4,
+                pointHoverRadius: 5,
+                pointBackgroundColor: chartData.map(d => d.is_up ? c.up : c.down),
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: c.tooltipBg,
+                titleColor: c.tooltipText,
+                bodyColor: c.tooltipText,
+                borderColor: isLight() ? '#e2e8f0' : '#334155',
+                borderWidth: 1,
+                callbacks: {
+                    title: function(items) {
+                        if (chartData[items[0].dataIndex]) {
+                            return fmtTooltip(chartData[items[0].dataIndex].checked_at);
+                        }
+                        return '';
+                    },
+                    label: function(ctx) {
+                        return 'Response: ' + ctx.parsed.y + 'ms';
+                    }
+                }
+            }
+        },
+        scales: {
+            x: {
+                display: true,
+                grid: { color: c.grid },
+                ticks: { color: c.text, maxTicksLimit: xTickLimit, font: { size: 10 } }
+            },
+            y: {
+                display: true,
+                beginAtZero: true,
+                grid: { color: c.grid },
+                ticks: { color: c.text, callback: v => v + 'ms' }
+            }
+        }
+    }
+});
+</script>

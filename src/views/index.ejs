@@ -1,0 +1,243 @@
+<div class="mb-6 flex items-center justify-between">
+    <div>
+        <h1 class="text-2xl font-bold text-primary">Website Status Dashboard</h1>
+        <p class="text-xs text-muted mt-0.5" id="last-updated">Auto-refresh every 30s</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <button onclick="refreshAll()" id="refresh-btn"
+            class="inline-flex items-center px-3 py-2 text-sm btn-outline rounded-lg transition border">
+            <svg id="refresh-icon" class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Refresh
+        </button>
+        <a href="/config"
+            class="inline-flex items-center px-4 py-2 btn-primary text-sm font-medium rounded-lg transition">
+            + Add Monitor
+        </a>
+    </div>
+</div>
+
+<% if (monitors.length === 0) { %>
+<div class="card rounded-xl shadow-sm p-12 text-center border">
+    <div class="text-4xl mb-4">&#127760;</div>
+    <h2 class="text-xl font-semibold text-primary mb-2">No monitors yet</h2>
+    <p class="text-muted mb-6">Add your first website to start monitoring.</p>
+    <a href="/config"
+        class="inline-flex items-center px-4 py-2 btn-primary text-sm font-medium rounded-lg transition">
+        Add Monitor
+    </a>
+</div>
+<% } else { %>
+<div id="monitors-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+    <% monitors.forEach(function(monitor) { %>
+    <div class="card rounded-xl shadow-sm overflow-hidden border hover:shadow-md transition" id="card-<%= monitor.id %>">
+        <div class="p-5">
+            <div class="flex items-start justify-between mb-3">
+                <div>
+                    <h3 class="font-semibold text-primary"><%= monitor.name %></h3>
+                    <p class="text-xs text-muted truncate max-w-[200px]" title="<%= monitor.url %>"><%= monitor.url %></p>
+                </div>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    <%= monitor.is_up === true ? 'badge-up' : monitor.is_up === false ? 'badge-down' : 'badge-na' %>"
+                    id="badge-<%= monitor.id %>">
+                    <%= monitor.is_up === true ? 'UP' : monitor.is_up === false ? 'DOWN' : 'N/A' %>
+                </span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p class="text-muted text-xs">Status Code</p>
+                    <p class="font-medium text-primary status-code" id="statuscode-<%= monitor.id %>"
+                        data-status-code="<%= monitor.status_code %>">
+                        <%= monitor.status_code || '—' %>
+                    </p>
+                </div>
+                <div>
+                    <p class="text-muted text-xs">Response Time</p>
+                    <p class="font-medium text-secondary" id="restime-<%= monitor.id %>">
+                        <%= monitor.response_time_ms ? monitor.response_time_ms + 'ms' : '—' %>
+                    </p>
+                </div>
+                <div>
+                    <p class="text-muted text-xs">Uptime (24h)</p>
+                    <p class="font-medium text-secondary" id="uptime-<%= monitor.id %>">
+                        <%= monitor.uptime_24h !== null ? monitor.uptime_24h + '%' : '—' %>
+                    </p>
+                </div>
+                <div>
+                    <p class="text-muted text-xs">Last Check</p>
+                    <p class="font-medium text-secondary text-xs" id="lastcheck-<%= monitor.id %>">
+                        <%= monitor.checked_at ? new Date(monitor.checked_at).toLocaleTimeString() : '—' %>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-5 py-3 border-t border-subtle flex items-center justify-between">
+            <a href="/check/<%= monitor.id %>"
+                class="text-xs accent font-medium accent-hover transition">
+                View Details &rarr;
+            </a>
+            <button onclick="toggleChart('<%= monitor.id %>')"
+                class="text-xs text-muted accent-hover transition">
+                Analytics
+            </button>
+        </div>
+
+        <div id="chart-container-<%= monitor.id %>" class="hidden px-5 pb-5">
+            <canvas id="chart-<%= monitor.id %>"></canvas>
+        </div>
+    </div>
+    <% }); %>
+</div>
+<% } %>
+
+<script>
+let chartInstances = {};
+
+function applyBadgeStyle(badge, isUp) {
+    if (isUp === true) {
+        badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium badge-up';
+        badge.textContent = 'UP';
+    } else if (isUp === false) {
+        badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium badge-down';
+        badge.textContent = 'DOWN';
+    } else {
+        badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium badge-na';
+        badge.textContent = 'N/A';
+    }
+}
+
+async function refreshAll() {
+    const icon = document.getElementById('refresh-icon');
+    icon.classList.add('animate-spin');
+
+    try {
+        const res = await fetch('/api/monitors');
+        if (!res.ok) throw new Error('Failed to fetch');
+        const data = await res.json();
+
+        data.monitors.forEach(function(m) {
+            const badge = document.getElementById('badge-' + m.id);
+            if (badge) applyBadgeStyle(badge, m.is_up);
+
+            const sc = document.getElementById('statuscode-' + m.id);
+            if (sc) {
+                const code = m.status_code;
+                sc.textContent = code || '—';
+                sc.className = 'font-medium ' + (code ? (code < 400 ? 'success-text' : 'error-msg') : 'text-muted');
+            }
+
+            const rt = document.getElementById('restime-' + m.id);
+            if (rt) rt.textContent = m.response_time_ms ? m.response_time_ms + 'ms' : '—';
+
+            const up = document.getElementById('uptime-' + m.id);
+            if (up) up.textContent = m.uptime_24h !== null ? m.uptime_24h + '%' : '—';
+
+            const lc = document.getElementById('lastcheck-' + m.id);
+            if (lc) lc.textContent = m.checked_at ? new Date(m.checked_at).toLocaleTimeString() : '—';
+
+            if (chartInstances[m.id]) {
+                chartInstances[m.id].destroy();
+                chartInstances[m.id] = null;
+                document.getElementById('chart-container-' + m.id).classList.add('hidden');
+            }
+        });
+
+        document.getElementById('last-updated').textContent =
+            'Updated ' + new Date().toLocaleTimeString() + ' · Auto-refresh 30s';
+    } catch (err) {
+        console.error('Refresh failed:', err);
+    } finally {
+        icon.classList.remove('animate-spin');
+    }
+}
+
+function getChartColors() {
+    const isLight = document.documentElement.classList.contains('light');
+    return {
+        line: isLight ? '#6366f1' : '#818cf8',
+        fill: isLight ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.15)',
+        up: '#22c55e',
+        down: '#ef4444',
+        grid: isLight ? '#f0f0f0' : '#1e293b',
+        tooltip: isLight ? '#ffffff' : '#1e293b',
+        tooltipText: isLight ? '#0f172a' : '#f1f5f9',
+    };
+}
+
+async function toggleChart(monitorId) {
+    const container = document.getElementById('chart-container-' + monitorId);
+    const isHidden = container.classList.contains('hidden');
+
+    if (isHidden) {
+        container.classList.remove('hidden');
+
+        if (!chartInstances[monitorId]) {
+            const res = await fetch('/api/monitors/' + monitorId + '/history?hours=24');
+            const json = await res.json();
+
+            const ctx = document.getElementById('chart-' + monitorId).getContext('2d');
+            const data = json.data || [];
+            const colors = getChartColors();
+
+            chartInstances[monitorId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => {
+                        const dt = new Date(d.checked_at);
+                        return String(dt.getDate()).padStart(2,'0') + '/' +
+                               String(dt.getMonth()+1).padStart(2,'0') + ' ' +
+                               String(dt.getHours()).padStart(2,'0') + ':' +
+                               String(dt.getMinutes()).padStart(2,'0');
+                    }),
+                    datasets: [{
+                        label: 'Response Time (ms)',
+                        data: data.map(d => d.response_time_ms),
+                        borderColor: colors.line,
+                        backgroundColor: colors.fill,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: data.length > 100 ? 0 : 4,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: data.map(d => d.is_up ? colors.up : colors.down),
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                    },
+                    scales: {
+                        x: { display: true, ticks: { color: colors.tooltipText, maxTicksLimit: 8, font: { size: 10 } }, grid: { color: colors.grid } },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: colors.grid },
+                            ticks: { color: colors.tooltipText }
+                        }
+                    }
+                }
+            });
+        }
+    } else {
+        container.classList.add('hidden');
+    }
+}
+
+window.addEventListener('theme-changed', function() {
+    for (const id in chartInstances) {
+        if (chartInstances[id]) {
+            chartInstances[id].destroy();
+            chartInstances[id] = null;
+        }
+        const container = document.getElementById('chart-container-' + id);
+        if (container && !container.classList.contains('hidden')) {
+            container.classList.add('hidden');
+        }
+    }
+});
+
+setInterval(refreshAll, 30000);
+</script>

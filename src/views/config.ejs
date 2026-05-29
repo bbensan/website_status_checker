@@ -1,0 +1,142 @@
+<div class="mb-6 flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-primary">Monitor Configuration</h1>
+</div>
+
+<% if (error) { %>
+<div class="mb-4 p-4 rounded-lg border text-sm error-msg" style="background-color: var(--danger-bg); border-color: var(--danger-border);">
+    <%= error %>
+</div>
+<% } %>
+
+<div class="card rounded-xl shadow-sm p-6 mb-6 border">
+    <h2 class="text-lg font-semibold text-primary mb-4">Add New Monitor</h2>
+    <form action="/config" method="POST" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+        <div>
+            <label class="block text-xs font-medium text-muted mb-1">Name</label>
+            <input type="text" name="name" required placeholder="My Website"
+                class="w-full px-3 py-2 input-field rounded-lg text-sm border">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-muted mb-1">URL</label>
+            <input type="url" name="url" required placeholder="https://example.com"
+                class="w-full px-3 py-2 input-field rounded-lg text-sm border">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-muted mb-1">Interval (seconds)</label>
+            <input type="number" name="check_interval" required min="10" value="60" placeholder="60"
+                class="w-full px-3 py-2 input-field rounded-lg text-sm border">
+        </div>
+        <div>
+            <button type="submit"
+                class="w-full px-4 py-2 btn-primary text-sm font-medium rounded-lg transition">
+                Add Monitor
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card rounded-xl shadow-sm overflow-hidden border">
+    <div class="table-wrapper">
+        <table class="w-full text-sm">
+            <thead class="table-header border-b">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">URL</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Interval</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="table-body divide-y">
+                <% if (monitors.length === 0) { %>
+                <tr>
+                    <td colspan="5" class="px-6 py-8 text-center text-muted">No monitors configured yet.</td>
+                </tr>
+                <% } else { %>
+                <% monitors.forEach(function(m) { %>
+                <tr>
+                    <td class="px-6 py-4 font-medium text-primary"><%= m.name %></td>
+                    <td class="px-6 py-4 text-secondary truncate max-w-xs" title="<%= m.url %>"><%= m.url %></td>
+                    <td class="px-6 py-4 text-secondary"><%= m.check_interval %>s</td>
+                    <td class="px-6 py-4">
+                        <form action="/config/<%= m.id %>?_method=PUT" method="POST" class="inline">
+                            <input type="hidden" name="name" value="<%= m.name %>">
+                            <input type="hidden" name="url" value="<%= m.url %>">
+                            <input type="hidden" name="check_interval" value="<%= m.check_interval %>">
+                            <input type="hidden" name="is_active" value="<%= !m.is_active %>">
+                            <button type="submit"
+                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer transition
+                                <%= m.is_active ? 'badge-up' : 'badge-na' %>">
+                                <%= m.is_active ? 'Active' : 'Paused' %>
+                            </button>
+                        </form>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            <form action="/config/<%= m.id %>/check" method="POST" class="inline">
+                                <button type="submit" title="Check Now"
+                                    class="px-3 py-1 text-xs accent border rounded hover:bg-hover transition"
+                                    style="border-color: var(--accent);">
+                                    Check
+                                </button>
+                            </form>
+                            <button onclick="showEditForm('<%= m.id %>')"
+                                class="px-3 py-1 text-xs btn-outline border rounded transition">
+                                Edit
+                            </button>
+                            <form action="/config/<%= m.id %>?_method=DELETE" method="POST" class="inline" onsubmit="return confirm('Delete this monitor?');">
+                                <button type="submit"
+                                    class="px-3 py-1 text-xs error-msg border rounded transition"
+                                    style="border-color: var(--danger-border);">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
+
+                        <div id="edit-form-<%= m.id %>" class="hidden mt-3 p-4 rounded-lg border" style="background-color: var(--bg-elevated); border-color: var(--border);">
+                            <form action="/config/<%= m.id %>?_method=PUT" method="POST" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                                <div>
+                                    <label class="block text-xs text-muted mb-1">Name</label>
+                                    <input type="text" name="name" required value="<%= m.name %>"
+                                        class="w-full px-2 py-1.5 input-field border rounded text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-muted mb-1">URL</label>
+                                    <input type="url" name="url" required value="<%= m.url %>"
+                                        class="w-full px-2 py-1.5 input-field border rounded text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-muted mb-1">Interval (sec)</label>
+                                    <input type="number" name="check_interval" required min="10" value="<%= m.check_interval %>"
+                                        class="w-full px-2 py-1.5 input-field border rounded text-sm">
+                                </div>
+                                <div class="flex gap-2">
+                                    <input type="hidden" name="is_active" value="<%= m.is_active %>">
+                                    <button type="submit"
+                                        class="flex-1 px-3 py-1.5 btn-primary text-xs rounded transition">
+                                        Save
+                                    </button>
+                                    <button type="button" onclick="hideEditForm('<%= m.id %>')"
+                                        class="flex-1 px-3 py-1.5 btn-outline border text-xs rounded transition">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                <% }); %>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function showEditForm(id) {
+    document.getElementById('edit-form-' + id).classList.remove('hidden');
+}
+function hideEditForm(id) {
+    document.getElementById('edit-form-' + id).classList.add('hidden');
+}
+</script>
